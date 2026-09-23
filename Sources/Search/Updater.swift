@@ -115,6 +115,9 @@ final class Updater: ObservableObject {
     func checkIfDue(then say: @escaping (String) -> Void) {
         self.say = say
         Swap.sweep()
+        // A development/test world should be hermetic by default. It only
+        // talks to an update feed when the developer explicitly supplied one.
+        guard !Store.testing || Updater.overridden else { return }
         // And again every hour for as long as the app is up — a browser that
         // is left open for a week would otherwise never look.
         if clock == nil {
@@ -138,6 +141,10 @@ final class Updater: ObservableObject {
     /// names, or nil when this is the latest; what becomes of it after that
     /// is said through the line handed to `checkIfDue`.
     func check(then done: @escaping (Release?) -> Void) {
+        guard !Store.testing || Updater.overridden else {
+            done(nil)
+            return
+        }
         guard !checking else { return }
         checking = true
         Task { [weak self] in
