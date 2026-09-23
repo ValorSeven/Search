@@ -1578,6 +1578,15 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             return
         }
 
+        // A normal automation page never crosses into local files, extension
+        // pages or external application schemes. Test worlds intentionally
+        // keep the broader surface for regression coverage.
+        if let source = tab(for: webView), source.bench, !Store.testing,
+           !["http", "https", "about", "data", "blob"].contains(scheme) {
+            decisionHandler(.cancel)
+            return
+        }
+
         // An extension's OAuth sign-in coming back: the address is the
         // answer, handed to the extension, and never loaded.
         if ExtensionAuth.intercept(url, browser: self) {
@@ -1626,16 +1635,28 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         for action: WKNavigationAction,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-        let from = tab(for: webView)?.id ?? activeID
-        let tab = Tab(shy: tab(for: webView)?.shy ?? false, configuration: configuration)
-        adopt(tab)
-        tab.opener = from
-        activeID = tab.id
-        editing = false
+        let source = tab(for: webView)
+        let from = source?.id ?? activeID
+        let child = Tab(
+            shy: source?.shy ?? false,
+            bench: source?.bench ?? false,
+            configuration: configuration
+        )
+        adopt(child)
+        child.opener = from
+        if child.bench {
+            // window.open() from automation stays automation and never steals
+            // the person's visible tab. Give it the same off-screen room as
+            // any other Bench page so WebKit lays it out normally.
+            Bench.shared.house(child)
+        } else {
+            activeID = child.id
+            editing = false
+        }
         // Returning the view is what makes it the target. WebKit loads the
         // request into it itself when the action carries one.
-        if let url = action.request.url { tab.setAddressOptimistically(url) }
-        return tab.web
+        if let url = action.request.url { child.setAddressOptimistically(url) }
+        return child.web
     }
 
     /// Anything the window can't show is something to keep instead.
@@ -1679,6 +1700,10 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         type: WKMediaCaptureType,
         decisionHandler: @escaping (WKPermissionDecision) -> Void
     ) {
+        if let source = tab(for: webView), source.bench, !Store.testing {
+            decisionHandler(.deny)
+            return
+        }
         let host = origin.host.isEmpty ? (tab(for: webView)?.address?.host() ?? "This page") : origin.host
         let key = "\(host)|\(type.rawValue)"
 
@@ -1730,7 +1755,9 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         guard let tab = tab(for: webView) else { return }
         // Back to whoever opened it, so you land where you started the sign-in
         // rather than wherever the row happens to put you.
-        if let opener = tab.opener, let home = tabs.first(where: { $0.id == opener }) {
+        if !tab.bench,
+           let opener = tab.opener,
+           let home = tabs.first(where: { $0.id == opener }) {
             select(home)
         }
         tab.pin = nil
