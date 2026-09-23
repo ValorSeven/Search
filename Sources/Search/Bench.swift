@@ -232,11 +232,16 @@ final class Bench {
 
         switch verb {
         case "tabs":
-            answer(["tabs": browser.tabs.map(describe)])
+            let visible = Store.testing ? browser.tabs : browser.tabs.filter { $0.bench }
+            answer(["tabs": visible.map(describe)])
 
         case "open":
             guard let url = (request["url"] as? String).flatMap(Address.url(from:)) else {
                 answer(["error": "open needs a url"])
+                return
+            }
+            guard Store.testing || ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+                answer(["error": "normal automation tabs only open http/https — use a --test world for local file/data pages"])
                 return
             }
             let tab = browser.benchOpen(url)
@@ -247,6 +252,10 @@ final class Bench {
             guard let tab = find(request, in: browser) else { answer(missing(request)); return }
             guard let url = (request["url"] as? String).flatMap(Address.url(from:)) else {
                 answer(["error": "go needs a url"])
+                return
+            }
+            guard Store.testing || ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+                answer(["error": "normal automation tabs only open http/https — use a --test world for local file/data pages"])
                 return
             }
             tab.go(to: url)
@@ -436,6 +445,13 @@ final class Bench {
             step(1)
 
         case "ui":
+            // This deliberately stays a test-only capability. A local agent
+            // may drive its own pages in a normal run, but it does not get to
+            // open password/settings surfaces in the person's browser.
+            guard Store.testing else {
+                answer(["error": "ui only works in an isolated --test/--world run"])
+                return
+            }
             // Open or close the app's own panels, to reproduce what a person
             // did without a person.
             if let on = request["settings"] as? Bool { browser.tuning = on }
@@ -451,6 +467,10 @@ final class Bench {
             answer(["ok": true])
 
         case "extensions", "ext-add", "ext-folder", "ext-press", "ext-remove", "ext-reload", "ext-page", "ext-popup", "ext-menu", "ext-pin", "ext-shot", "ext-answer", "ext-enable":
+            guard Store.testing else {
+                answer(["error": "extension automation only works in an isolated --test/--world run"])
+                return
+            }
             guard #available(macOS 15.4, *) else {
                 answer(["error": "extensions need macOS 15.4"])
                 return
@@ -571,7 +591,9 @@ final class Bench {
 
     private func find(_ request: [String: Any], in browser: Browser) -> Tab? {
         guard let ref = (request["id"] as? String)?.lowercased(), !ref.isEmpty else { return nil }
-        return browser.tabs.first { $0.id.uuidString.lowercased().hasPrefix(ref) }
+        return browser.tabs.first {
+            $0.id.uuidString.lowercased().hasPrefix(ref) && (Store.testing || $0.bench)
+        }
     }
 
     private func missing(_ request: [String: Any]) -> [String: Any] {
