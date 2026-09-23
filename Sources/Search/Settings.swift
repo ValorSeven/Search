@@ -180,7 +180,7 @@ struct SettingsPanel: View {
                 Switch(on: $prefs.autocorrect)
             }
             Rule()
-            Line("Let a script drive Search", "A local socket for testing. Its tabs open beside yours with a flask on them and never take over — see ./bench") {
+            Line("Let local automation drive Search", "Automation gets its own cookies and can only control its own flask tabs. Full UI/extension control stays inside explicit test worlds — see ./bench") {
                 Switch(on: $prefs.bench)
             }
         }
