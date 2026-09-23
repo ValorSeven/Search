@@ -52,6 +52,18 @@ enum Store {
         return WKWebsiteDataStore(forIdentifier: probeStore(1))
     }
 
+    /// Automation never borrows the browser's normal cookies, sign-ins or
+    /// cache. A bench tab is useful precisely because a script can do more
+    /// than a page can, so its network identity is kept in a separate,
+    /// persistent WebKit world. It survives restarts for repeatable agent
+    /// workflows without ever becoming the person's browsing session.
+    static var benchWebsites: WKWebsiteDataStore {
+        if testing { return websites }
+        return WKWebsiteDataStore(forIdentifier: benchStore)
+    }
+
+    private static let benchStore = UUID(uuidString: "5E4CB07A-0001-4000-8000-000000000001")!
+
     /// A test copy of the app under a bundle id of its own has a WebKit
     /// container of its own too, so it can use WebKit's default store and
     /// extension configuration — the ones the real browser uses, which
