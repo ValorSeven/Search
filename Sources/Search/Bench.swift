@@ -648,7 +648,7 @@ final class Bench {
     /// A page nobody is looking at has to be somewhere to be laid out at all.
     /// The stage takes it back the moment you pick its tab, and it comes
     /// here again when the bench next needs it.
-    private func house(_ tab: Tab) {
+    func house(_ tab: Tab) {
         guard tab.bench, tab.web.window == nil else { return }
         let window = room ?? makeRoom()
         tab.web.frame = window.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
