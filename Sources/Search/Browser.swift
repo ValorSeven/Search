@@ -1111,7 +1111,9 @@ final class Browser: NSObject, ObservableObject {
     @discardableResult
     func benchOpen(_ url: URL) -> Tab {
         let url = Browser.page(url)
-        let tab = Tab(bench: true, configuration: Browser.extensionConfiguration(for: url))
+        let configuration = Browser.extensionConfiguration(for: url)
+            ?? Web.configuration(dataStore: Store.benchWebsites, extensions: false)
+        let tab = Tab(bench: true, configuration: configuration)
         prepare(tab)
         tabs.append(tab)
         tab.go(to: url)
@@ -1263,7 +1265,7 @@ final class Browser: NSObject, ObservableObject {
         // from the box, and go when the caret does. Nothing is filled on
         // its own — the way Safari does it, and what a person expects.
         tab.onField = { [weak self] tab, spot in
-            guard let self else { return }
+            guard let self, !tab.bench else { return }
             guard let spot else {
                 if pickedInto == tab.id { pickedInto = nil }
                 guard suggesting?.tab == tab.id else { return }
@@ -1285,7 +1287,7 @@ final class Browser: NSObject, ObservableObject {
         }
 
         tab.onCredentials = { [weak self] tab, host, user, password in
-            guard let self, prefs.savesPasswords, !password.isEmpty, !tab.shy,
+            guard let self, !tab.bench, prefs.savesPasswords, !password.isEmpty, !tab.shy,
                   !Vault.isNever(host)
             else { return }
             // A password manager extension that asked Chrome's way to do the
@@ -1329,7 +1331,7 @@ final class Browser: NSObject, ObservableObject {
         tab.$title
             .dropFirst()
             .sink { [weak self, weak tab] title in
-                guard let tab, !tab.shy, let url = tab.address else { return }
+                guard let tab, !tab.shy, !tab.bench, let url = tab.address else { return }
                 self?.history.retitle(url, title)
             }
             .store(in: &bag)
