@@ -300,13 +300,15 @@ final class Tab: ObservableObject, Identifiable {
         controller.removeScriptMessageHandler(forName: ImageRelay.name)
         controller.removeScriptMessageHandler(forName: StoreRelay.name)
         controller.add(relay, name: ScrollRelay.name)
-        controller.add(veils_, name: VeilRelay.name)
         controller.add(images, name: ImageRelay.name)
-        controller.add(shop, name: StoreRelay.name)
-        // Automation tabs deliberately do not participate in the browser's
-        // password/form relay. They can still type through Bench, but a page
-        // they open cannot discover or trigger the person's Keychain flow.
-        if !bench { controller.add(forms, name: FormRelay.name) }
+        // Automation tabs deliberately get no state-changing page bridge:
+        // no password capture, no hide-element writes and no Chrome Web Store
+        // install relay. Bench can still inspect and act on its own DOM.
+        if !bench {
+            controller.add(veils_, name: VeilRelay.name)
+            controller.add(shop, name: StoreRelay.name)
+            controller.add(forms, name: FormRelay.name)
+        }
         Shield.shared.protect(controller)
         built = web
         arm(hiding: veils)
@@ -344,10 +346,12 @@ final class Tab: ObservableObject, Identifiable {
         ]
 
         relay.tab = self
-        veils_.tab = self
-        if !bench { forms.tab = self }
+        if !bench {
+            veils_.tab = self
+            forms.tab = self
+            shop.tab = self
+        }
         images.tab = self
-        shop.tab = self
         ears.watch(web) { [weak self] on in self?.noisy = on }
         return web
     }
@@ -387,10 +391,10 @@ final class Tab: ObservableObject, Identifiable {
         controller.addUserScript(
             WKUserScript(source: ScrollRelay.script, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
         )
-        controller.addUserScript(
-            WKUserScript(source: Veiling.picker, injectionTime: .atDocumentStart, forMainFrameOnly: true)
-        )
         if !bench {
+            controller.addUserScript(
+                WKUserScript(source: Veiling.picker, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+            )
             controller.addUserScript(
                 WKUserScript(source: FormRelay.script, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
             )
@@ -406,9 +410,11 @@ final class Tab: ObservableObject, Identifiable {
         controller.addUserScript(
             WKUserScript(source: ImageRelay.watch, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         )
-        controller.addUserScript(
-            WKUserScript(source: StoreRelay.script, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
-        )
+        if !bench {
+            controller.addUserScript(
+                WKUserScript(source: StoreRelay.script, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+            )
+        }
         if !bench, !FormRelay.passkeysOffered {
             controller.addUserScript(
                 WKUserScript(
@@ -418,7 +424,7 @@ final class Tab: ObservableObject, Identifiable {
                 )
             )
         }
-        guard !css.isEmpty else { return }
+        guard !bench, !css.isEmpty else { return }
         controller.addUserScript(
             WKUserScript(source: Veiling.style(css), injectionTime: .atDocumentStart, forMainFrameOnly: true)
         )
