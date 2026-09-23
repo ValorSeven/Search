@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: ["valor-next"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+      - name: Validate scripts
+        run: |
+          bash -n build.sh fresh.sh publish.sh
+          python3 -m py_compile bench
+      - name: Debug build
+        run: swift build -c debug
+      - name: Release build
+        run: swift build -c release
