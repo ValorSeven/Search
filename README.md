@@ -91,7 +91,7 @@ A build you make yourself won't be notarized or carry Office Commun's Developer 
 
 ### Testing it without closing it
 
-Turn on **Settings › General › Let a script drive Search** and the running app listens on a Unix socket in its own folder (readable by your user only). `./bench` at the root of the repository speaks it:
+Turn on **Settings › General › Let local automation drive Search** and the running app listens on a Unix socket in its own folder. In a normal run, automation has a separate persistent WebKit profile, only sees/controls tabs it opened itself, and only navigates `http`/`https`. Password capture/fill, app UI control and extension automation are not exposed. `./bench` at the root of the repository speaks it:
 
 ```
 ./bench open https://example.com     # a tab of its own, at the end of your row, marked with a flask
@@ -103,7 +103,7 @@ Turn on **Settings › General › Let a script drive Search** and the running a
 ./bench close all
 ```
 
-Bench tabs are never selected for you, never enter the session or the history, and go when the script says so. It is how this browser is tested while somebody is using it.
+Bench tabs are never selected for you, never enter the session or history, never use your normal cookie jar, and never participate in Search's password relay. For privileged regression testing, run an isolated world with `SEARCH_PROBE=valor-next ./fresh.sh` and use `./bench --world valor-next …`; only those explicit test worlds can drive app UI, normal tabs or extensions.
 
 ### Contributing
 
