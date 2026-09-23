@@ -19,16 +19,22 @@ enum Web {
     /// — web tabs and extension views alike (see Extensions.init).
     static let userAgentName = "Version/26.5 Safari/605.1.15"
 
-    static func configuration(shy: Bool = false) -> WKWebViewConfiguration {
+    static func configuration(
+        shy: Bool = false,
+        dataStore: WKWebsiteDataStore? = nil,
+        extensions: Bool = true
+    ) -> WKWebViewConfiguration {
         let config = WKWebViewConfiguration()
         // The real store, not the ephemeral one: staying signed in between
         // launches is the difference between a browser and a preview pane. A
         // shy tab gets its own store, which exists only while it does — its own
         // cookies, its own sign-ins, and nothing left behind when it closes.
-        config.websiteDataStore = shy ? .nonPersistent() : Store.websites
+        config.websiteDataStore = dataStore ?? (shy ? .nonPersistent() : Store.websites)
         // Chrome extensions see every page but a private one. The controller
         // has to be there when the view is made; it can't be added after.
-        if #available(macOS 15.4, *), !shy { MainActor.assumeIsolated { Extensions.attach(config) } }
+        if #available(macOS 15.4, *), !shy, extensions {
+            MainActor.assumeIsolated { Extensions.attach(config) }
+        }
         // Left alone, WKWebView says only "AppleWebKit … (KHTML, like Gecko)" —
         // no browser, no version. Google reads that as something it doesn't
         // recognise and serves the stripped-back page from a decade ago:
@@ -276,8 +282,11 @@ final class Tab: ObservableObject, Identifiable {
         // Pages follow the appearance of the window they are drawn in, and the
         // window follows Settings › Appearance — so a site that honours
         // prefers-color-scheme goes dark with the frame, and not otherwise.
-        // Right-click, Inspect Element. The public way to say so since 13.3.
+        // Keep Web Inspector in development worlds, never in a normal release.
+        // A shipped browser should not expose a debugging surface accidentally.
+        #if DEBUG
         if #available(macOS 13.3, *) { web.isInspectable = true }
+        #endif
         web.navigationDelegate = delegate
         web.uiDelegate = delegate
 
@@ -294,7 +303,10 @@ final class Tab: ObservableObject, Identifiable {
         controller.add(veils_, name: VeilRelay.name)
         controller.add(images, name: ImageRelay.name)
         controller.add(shop, name: StoreRelay.name)
-        controller.add(forms, name: FormRelay.name)
+        // Automation tabs deliberately do not participate in the browser's
+        // password/form relay. They can still type through Bench, but a page
+        // they open cannot discover or trigger the person's Keychain flow.
+        if !bench { controller.add(forms, name: FormRelay.name) }
         Shield.shared.protect(controller)
         built = web
         arm(hiding: veils)
@@ -333,7 +345,7 @@ final class Tab: ObservableObject, Identifiable {
 
         relay.tab = self
         veils_.tab = self
-        forms.tab = self
+        if !bench { forms.tab = self }
         images.tab = self
         shop.tab = self
         ears.watch(web) { [weak self] on in self?.noisy = on }
@@ -378,9 +390,11 @@ final class Tab: ObservableObject, Identifiable {
         controller.addUserScript(
             WKUserScript(source: Veiling.picker, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         )
-        controller.addUserScript(
-            WKUserScript(source: FormRelay.script, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
-        )
+        if !bench {
+            controller.addUserScript(
+                WKUserScript(source: FormRelay.script, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+            )
+        }
         controller.addUserScript(
             WKUserScript(source: Swipe.calm, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         )
@@ -395,7 +409,7 @@ final class Tab: ObservableObject, Identifiable {
         controller.addUserScript(
             WKUserScript(source: StoreRelay.script, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
         )
-        if !FormRelay.passkeysOffered {
+        if !bench, !FormRelay.passkeysOffered {
             controller.addUserScript(
                 WKUserScript(
                     source: FormRelay.withoutPasskeys,
